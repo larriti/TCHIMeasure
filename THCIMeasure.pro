@@ -21,3 +21,6 @@ HEADERS += \
     manager.h \
     mytype.h \
     serial.h
+
+target.path = /home/alarm/App/THCI
+!isEmpty(target.path): INSTALLS += target

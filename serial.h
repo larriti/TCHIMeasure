@@ -40,7 +40,7 @@ private:
     QSerialPort *mySerial;
     quint16 house_id;
     quint8 terminal_num;
-    char terminal_first_id;
+    quint8 terminal_first_id;
     quint64 seconds;
     quint64 writeinterval;
 };

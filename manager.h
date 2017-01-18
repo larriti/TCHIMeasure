@@ -45,6 +45,8 @@ private:
     QDate   deleteDate;
     QTimer  deleteFileTimer;
     qint16 deleteInterval;
+    quint8 terminal_num;
+    quint8 terminal_first_id;
 };
 
 #endif // MANAGER_H

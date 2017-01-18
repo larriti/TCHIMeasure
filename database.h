@@ -19,9 +19,9 @@ signals:
 
 public slots:
     bool databaseConnect();
-    bool uploadData(QStringList);
+    bool uploadData(QStringList, QString);
     void paraCompare(QStringList, QString);
-    void uploadtAlarm(QString);
+    void uploadtAlarm(QString, QString);
 
 private slots:
 

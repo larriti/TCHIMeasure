@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <QSettings>
+#include <QCoreApplication>
 #include <QThread>
 #include "mytype.h"
 #include "manager.h"
@@ -13,21 +14,22 @@ quint8 id;
 Serial::Serial(QObject *parent) : QObject(parent)
 {
     mySerial = new QSerialPort(this);
-    QSettings setting(CONFIGPATH, QSettings::IniFormat);
+    QSettings setting(QSettings::UserScope, QCoreApplication::organizationName(),
+                       QCoreApplication::applicationName());
 
     setting.beginGroup("serial");
-    mySerial->setBaudRate(setting.value("BaudRate").toLongLong());
-    mySerial->setDataBits(QSerialPort::DataBits(setting.value("DataBits").toInt()));
-    mySerial->setParity(QSerialPort::Parity(setting.value("Parity").toInt()));
-    mySerial->setStopBits(QSerialPort::StopBits(setting.value("StopBits").toInt()));
-    writeinterval = setting.value("WriteInterval", 1).toLongLong();
+    mySerial->setBaudRate(setting.value("BaudRate", "9600").toLongLong());
+    mySerial->setDataBits(QSerialPort::DataBits(setting.value("DataBits", "8").toInt()));
+    mySerial->setParity(QSerialPort::Parity(setting.value("Parity", "0").toInt()));
+    mySerial->setStopBits(QSerialPort::StopBits(setting.value("StopBits", "1").toInt()));
+    writeinterval = setting.value("WriteInterval", 5).toLongLong();
     setting.endGroup();
 
     setting.beginGroup("house");
-    house_id = setting.value("HouseID").toUInt();
-    terminal_first_id = setting.value("TerminalFirstID").toInt();
+    house_id = setting.value("HouseID", 1).toUInt();
+    terminal_first_id = setting.value("TerminalFirstID", 1).toInt();
     id=terminal_first_id;
-    terminal_num = setting.value("TerminalNum").toUInt();
+    terminal_num = setting.value("TerminalNum", 1).toUInt();
     setting.endGroup();
 
     connect(mySerial, SIGNAL(readyRead()), this, SLOT(serialReadData()));
@@ -110,7 +112,6 @@ void Serial::serialWriteData()
 
 void Serial::serialReadData()
 {
-//    qDebug() << mySerial->bytesAvailable();
     if(mySerial->bytesAvailable()==13)
     {
         readByteArray = mySerial->readAll();
@@ -118,11 +119,11 @@ void Serial::serialReadData()
         int temp = QString(readByteArray.toHex()).mid(0,2).toInt(&ok, 16);
         if((terminal_first_id <= temp) && (temp < terminal_first_id + terminal_num))
         {
-//            qDebug() << "Rece: " << readByteArray.toHex();
             emit readFinished(readByteArray);
         }
         else
         {
+            // Clear the received data
             mySerial->close();
             mySerial->open(QIODevice::ReadWrite);
         }
@@ -130,6 +131,7 @@ void Serial::serialReadData()
     else
     if(mySerial->bytesAvailable()>13)
     {
+        // Read the all received data
          mySerial->readAll();
     }
 
@@ -148,8 +150,8 @@ void Serial::serialErrorHandle(QSerialPort::SerialPortError serialerror)
         if(mySerial->isOpen())
         {
             mySerial->close();
-            emit serialError(mySerial->errorString());
         }
+        emit serialError(mySerial->errorString());
     }
 }
 
