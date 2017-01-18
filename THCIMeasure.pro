@@ -1,5 +1,7 @@
 QT += core
 QT -= gui
+QT += serialport
+QT += sql
 
 CONFIG += c++11
 
@@ -9,4 +11,13 @@ CONFIG -= app_bundle
 
 TEMPLATE = app
 
-SOURCES += main.cpp
+SOURCES += main.cpp \
+    database.cpp \
+    manager.cpp \
+    serial.cpp
+
+HEADERS += \
+    database.h \
+    manager.h \
+    mytype.h \
+    serial.h

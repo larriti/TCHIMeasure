@@ -1,53 +1,166 @@
 #include "database.h"
 #include <QDebug>
 #include <QDateTime>
-#include <QFile>
+#include <QSettings>
+#include <QStringList>
 #include "mytype.h"
 
 Database::Database(QObject *parent) : QObject(parent)
 {
-    mydatabase = QSqlDatabase::addDatabase("QMYSQL", "First");
+    myDatabase = QSqlDatabase::addDatabase("QMYSQL", "First");
+    myDatabase.setConnectOptions("MYSQL_OPT_CONNECT_TIMEOUT=5");
+    myDatabase.setConnectOptions("MYSQL_OPT_RECONNECT=TRUE");
+    QSettings setting(CONFIGPATH, QSettings::IniFormat);
+    setting.beginGroup("database");
+    myDatabase.setDatabaseName(setting.value("DatabaseName","lk").toString());
+    myDatabase.setHostName(setting.value("HostName", "localhost").toString());
+    myDatabase.setUserName(setting.value("UserName", "0").toString());
+    myDatabase.setPassword(setting.value("Password", "0").toString());
+    setting.endGroup();
+
+    setting.beginGroup("house");
+    house_id = setting.value("HouseID").toString();
+    setting.endGroup();
 }
 
-void Database::databaseConnect()
+Database::~Database()
 {
-    mydatabase.setDatabaseName("dbSensor");
-    mydatabase.setHostName("172.18.0.116");
-    mydatabase.setUserName("dgdz");
-    mydatabase.setPassword("dgdz405");
-    if(mydatabase.open())
-    {
-        qDebug("Database connected\t\t%s", qPrintable(DATETIME));
-    }
-    else
-    {
-        qDebug("Database connect failed\t\t%s", qPrintable(DATETIME));
-        qDebug("[Error]: %s", qPrintable(mydatabase.lastError().text()));
-    }
+    delete this;
 }
 
-void Database::insertData(QString insertStr)
+bool Database::databaseConnect()
 {
-    if(mydatabase.isOpen())
+    if(myDatabase.open())
     {
-        QSqlQuery query(mydatabase);
+        myDatabase.close();
+        return true;
+    }
 
-        query.prepare("INSERT INTO tableSensor(datetime, temperature, humidity, CO2, illumination) VALUES (?, ?, ?, ?, ?)");
-        query.addBindValue(QDateTime::currentDateTime().toString("yyyy-MM-ddThh:mm:ss"));
-        query.addBindValue(insertStr.left(4));
-        query.addBindValue(insertStr.mid(4,3));
-        query.addBindValue(insertStr.mid(7,3));
-        query.addBindValue(insertStr.right(4));
+    return false;
+}
 
+bool Database::uploadData(QStringList serialData)
+{
+    if(myDatabase.open())
+    {
+        QSqlQuery query(myDatabase);
+        query.prepare("INSERT INTO history_data(HOUSEID, TERMINALID, UPDATETIME, TEMPERATURE, HUMIDITY, CARBON) VALUES (?, ?, ?, ?, ?, ?)");
+
+        query.addBindValue(serialData.at(0));
+        query.addBindValue(serialData.at(1));
+        query.addBindValue(DATETIME);
+        query.addBindValue(serialData.at(2));
+        query.addBindValue(serialData.at(3));
+        query.addBindValue(serialData.at(4));
         bool ok = query.exec();
         if(ok)
         {
-            qDebug("Upload data success\t\t%s", qPrintable(DATETIME));
+            return true;
         }
         else
         {
-            qDebug("Upload data failed\t\t%s", qPrintable(DATETIME));
-            qDebug("[Error]: ", qPrintable(query.lastError().text()));
+            return false;
         }
+        myDatabase.close();
+    }
+
+    return false;
+}
+
+void Database::paraCompare(QStringList alarm_para, QString terminal_id)
+{
+    if(myDatabase.open())
+    {
+        bool ok;
+        QSqlQuery query(myDatabase);
+        query.prepare("SELECT DOWNTEMPERATURE,TEMPERATURE,DOWNHUMIDITY,HUMIDITY,DOWNCARBON,CARBON FROM alarm_para WHERE HOUSEID=? AND TERMINALID=? ORDER BY ID DESC LIMIT 1");
+        query.addBindValue(house_id);
+        query.addBindValue(terminal_id);
+        ok = query.exec();
+
+        if(ok)
+        {
+            if(query.size())
+            {
+                query.next();
+                QString comparePara;
+                QString settingPara;
+
+                comparePara = alarm_para.at(0);
+                settingPara = query.value(0).toString();
+                if(comparePara.toFloat(&ok) < settingPara.toFloat(&ok))
+                {
+                    this->uploadtAlarm(QString("%1号棚%2号终端温度低于%3")
+                                       .arg(house_id)
+                                       .arg(terminal_id)
+                                       .arg(settingPara)
+                                       );
+                }
+                settingPara = query.value(1).toString();
+                if(comparePara.toFloat(&ok) > settingPara.toFloat(&ok))
+                {
+                    this->uploadtAlarm(QString("%1号棚%2号终端温度高于%3")
+                                       .arg(house_id)
+                                       .arg(terminal_id)
+                                       .arg(settingPara)
+                                       );
+                }
+
+
+                comparePara = alarm_para.at(1);
+                settingPara = query.value(2).toString();
+                if(comparePara.toFloat(&ok) < settingPara.toFloat(&ok))
+                {
+                    this->uploadtAlarm(QString("%1号棚%2号终端湿度低于%3")
+                                       .arg(house_id)
+                                       .arg(terminal_id)
+                                       .arg(settingPara)
+                                       );
+                }
+                settingPara = query.value(3).toString();
+                if(comparePara.toFloat(&ok) > settingPara.toFloat(&ok))
+                {
+                    this->uploadtAlarm(QString("%1号棚%2号终端湿度高于%3")
+                                       .arg(house_id)
+                                       .arg(terminal_id)
+                                       .arg(settingPara)
+                                       );
+                }
+
+                comparePara = alarm_para.at(2);
+                settingPara = query.value(4).toString();
+                if(comparePara.toFloat(&ok) < settingPara.toFloat(&ok))
+                {
+                    this->uploadtAlarm(QString("%1号棚%2号终端CO2浓度低于%3")
+                                       .arg(house_id)
+                                       .arg(terminal_id)
+                                       .arg(settingPara)
+                                       );
+                }
+                settingPara = query.value(5).toString();
+                if(comparePara.toFloat(&ok) > settingPara.toFloat(&ok))
+                {
+                    this->uploadtAlarm(QString("%1号棚%2号终端CO2浓度高于%3")
+                                       .arg(house_id)
+                                       .arg(terminal_id)
+                                       .arg(settingPara)
+                                       );
+                }
+            }
+        }
+        myDatabase.close();
+    }
+}
+
+void Database::uploadtAlarm(QString alarm_info)
+{
+    if(myDatabase.open())
+    {
+        QSqlQuery query(myDatabase);
+        query.prepare("INSERT INTO alarm(ALERTTIME, ALERTINFO) VALUES (?, ?)");
+        query.addBindValue(DATETIME);
+        query.addBindValue(alarm_info);
+        query.exec();
+        myDatabase.close();
     }
 }

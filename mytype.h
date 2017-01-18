@@ -2,9 +2,10 @@
 #define MYTYPE_H
 
 #include <QDateTime>
+#include <QDir>
 
-#ifndef DATETIME
-#define DATETIME QDateTime::currentDateTime().toString("yyyy-MM-ddThh:mm:ss")
-#endif
+#define DATETIME QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+#define LOGPATH QDir::homePath()+"/App/log/THCI.log"
+#define CONFIGPATH QDir::homePath()+"/App/THCI/config.ini"
 
 #endif // MYTYPE_H

@@ -3,44 +3,55 @@
 #include <QDateTime>
 #include <QString>
 #include <QStringList>
+#include <QSettings>
+#include <QThread>
 #include "mytype.h"
+#include "manager.h"
+
+quint8 id;
 
 Serial::Serial(QObject *parent) : QObject(parent)
 {
-    myserial = new QSerialPort(this);
-    connect(myserial, SIGNAL(readyRead()), this, SLOT(readData()));
+    mySerial = new QSerialPort(this);
+    QSettings setting(CONFIGPATH, QSettings::IniFormat);
+
+    setting.beginGroup("serial");
+    mySerial->setBaudRate(setting.value("BaudRate").toLongLong());
+    mySerial->setDataBits(QSerialPort::DataBits(setting.value("DataBits").toInt()));
+    mySerial->setParity(QSerialPort::Parity(setting.value("Parity").toInt()));
+    mySerial->setStopBits(QSerialPort::StopBits(setting.value("StopBits").toInt()));
+    writeinterval = setting.value("WriteInterval", 1).toLongLong();
+    setting.endGroup();
+
+    setting.beginGroup("house");
+    house_id = setting.value("HouseID").toUInt();
+    terminal_first_id = setting.value("TerminalFirstID").toInt();
+    id=terminal_first_id;
+    terminal_num = setting.value("TerminalNum").toUInt();
+    setting.endGroup();
+
+    connect(mySerial, SIGNAL(readyRead()), this, SLOT(serialReadData()));
+    connect(mySerial, SIGNAL(error(QSerialPort::SerialPortError)), this, SLOT(serialErrorHandle(QSerialPort::SerialPortError)));
+    connect(&mTimer, SIGNAL(timeout()), this, SLOT(timerTimeout()));
+    connect(this, SIGNAL(canWriteData()), this, SLOT(serialTimeout()));
+    this->seconds = 0;
+    mTimer.setInterval(1000);
+//    readywrite = true;
 }
 
-void Serial::openSerialPort(QString portName)
+Serial::~Serial()
 {
-    myserial->setPortName(portName);
-    myserial->setBaudRate(QSerialPort::Baud9600);
-    myserial->setDataBits(QSerialPort::Data8);
-    myserial->setParity(QSerialPort::NoParity);
-    myserial->setStopBits(QSerialPort::OneStop);
-    if(myserial->open(QIODevice::ReadWrite))
-    {
-        qDebug("Serialport opened\t\t%s", qPrintable(DATETIME));
-    }
-    else
-    {
-        qDebug("[Error] Serialport open failed\t\t%s", qPrintable(DATETIME));
-    }
+    delete mySerial;
+    delete this;
 }
 
-void Serial::readData()
+void Serial::timerTimeout()
 {
-    QByteArray readByte;
-
-    readByte = myserial->readAll();
-    readStr += QString(readByte);
-    readNum += readByte.length();
-    if(readNum == 14)
+    seconds ++;
+    if(seconds>=writeinterval)
     {
-        emit readFinished(readStr);
-
-        readNum = 0;
-        readStr.clear();
+        seconds = 0;
+        emit canWriteData();
     }
 }
 
@@ -51,14 +62,118 @@ bool Serial::scanSerialPort(QStringList *portNameList)
     {
         tempList.append(info.portName());
     }
-
-    if(tempList.count() != 0)
+    *portNameList = tempList.filter("ttyUSB");
+    if(portNameList->count() != 0)
     {
-        *portNameList = tempList.filter("ttyUSB");
         return true;
     }
     else
     {
         return false;
     }
+}
+
+bool Serial::openSerialPort(QString portName)
+{
+    mySerial->setPortName(portName);
+    if(mySerial->open(QIODevice::ReadWrite))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void Serial::serialWriteData()
+{
+    if(mySerial->isOpen() && mySerial->isWritable())
+    {
+        static const char tempchar[] = {3, 0, 42, 0, 4};
+        QByteArray tempByte(tempchar, sizeof(tempchar));
+
+        tempByte.prepend(id);
+        uint crc = CRC16(tempByte);
+        tempByte.append(crc%256);
+        tempByte.append(crc/256);
+//        qDebug() << "Send: " << tempByte.toHex();
+        mySerial->write(tempByte);
+
+        id++;
+        if (id == terminal_first_id + terminal_num)
+        {
+            id = terminal_first_id;
+        }
+    }
+}
+
+void Serial::serialReadData()
+{
+//    qDebug() << mySerial->bytesAvailable();
+    if(mySerial->bytesAvailable()==13)
+    {
+        readByteArray = mySerial->readAll();
+        bool ok;
+        int temp = QString(readByteArray.toHex()).mid(0,2).toInt(&ok, 16);
+        if((terminal_first_id <= temp) && (temp < terminal_first_id + terminal_num))
+        {
+//            qDebug() << "Rece: " << readByteArray.toHex();
+            emit readFinished(readByteArray);
+        }
+        else
+        {
+            mySerial->close();
+            mySerial->open(QIODevice::ReadWrite);
+        }
+    }
+    else
+    if(mySerial->bytesAvailable()>13)
+    {
+         mySerial->readAll();
+    }
+
+}
+
+
+void Serial::serialTimeout()
+{
+    this->serialWriteData();
+}
+
+void Serial::serialErrorHandle(QSerialPort::SerialPortError serialerror)
+{
+    if(serialerror != QSerialPort::NoError)
+    {
+        if(mySerial->isOpen())
+        {
+            mySerial->close();
+            emit serialError(mySerial->errorString());
+        }
+    }
+}
+
+uint Serial::CRC16(QByteArray buf)
+{
+    uint crc = 0xFFFF;
+
+    for (int pos = 0; pos < buf.length(); pos++)
+    {
+        crc ^= (uint)buf[pos];                  // XOR byte into least sig. byte of crc
+
+        for (int i = 8; i != 0; i--)
+        {
+            /* Loop over each bit */
+            if ((crc & 0x0001) != 0)
+            {
+                /* If the LSB is set */
+                crc >>= 1;                      // Shift right and XOR 0xA001
+                crc ^= 0xA001;
+            }
+            else                                // Else LSB is not set
+                crc >>= 1;                      // Just shift right
+        }
+    }
+    /* Note, this number has low and high bytes swapped, so use it accordingly (or swap bytes) */
+    return crc;
 }

@@ -6,21 +6,29 @@
 #include <QtSql/QSqlQuery>
 #include <QtSql/QSqlRecord>
 #include <QtSql/QSqlError>
+#include <QTimer>
 
 class Database : public QObject
 {
     Q_OBJECT
 public:
     explicit Database(QObject *parent = 0);
+    ~Database();
 
 signals:
 
 public slots:
-    void databaseConnect();
-    void insertData(QString);
+    bool databaseConnect();
+    bool uploadData(QStringList);
+    void paraCompare(QStringList, QString);
+    void uploadtAlarm(QString);
+
+private slots:
+
 
 private:
-    QSqlDatabase mydatabase;
+    QSqlDatabase myDatabase;
+    QString house_id;
 };
 
 #endif // DATABASE_H

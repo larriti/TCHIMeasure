@@ -4,27 +4,45 @@
 #include <QObject>
 #include <QtSerialPort/QSerialPort>
 #include <QtSerialPort/QSerialPortInfo>
+#include <QTimer>
 
 class Serial : public QObject
 {
     Q_OBJECT
 public:
     explicit Serial(QObject *parent = 0);
-    qint8 readNum;
-    QString readStr;
+    ~Serial();
+    QByteArray readByteArray;
+    QTimer mTimer;
 
 signals:
-    void readFinished(QString);
+
+    void readFinished(QByteArray);
+    void canWriteData();
+    void serialError(QString);
 
 public slots:
-    void openSerialPort(QString);
+
+    bool openSerialPort(QString);
     bool scanSerialPort(QStringList *);
+    void serialWriteData();
 
 private slots:
-    void readData();
+
+    void serialReadData();
+    void serialErrorHandle(QSerialPort::SerialPortError);
+    void serialTimeout();
+    void timerTimeout();
+    uint CRC16(QByteArray);
 
 private:
-    QSerialPort *myserial;
+
+    QSerialPort *mySerial;
+    quint16 house_id;
+    quint8 terminal_num;
+    char terminal_first_id;
+    quint64 seconds;
+    quint64 writeinterval;
 };
 
 #endif // SERIAL_H
