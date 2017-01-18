@@ -268,13 +268,13 @@ void Manager::readFinished(QByteArray readData)
             /* upload serialdata to database */
             if(uploadStatus)
             {
-                qDebug() << tr("%1 ID=%2 database uploaded").arg(DATETIME).arg(uploadPara.at(1));
-                stream << QString("%1\tID=%2 database uploaded\n").arg(DATETIME).arg(uploadPara.at(1));
+                qDebug() << tr("%1 uploaded").arg(DATETIME);
+                stream << QString("%1\tuploaded\n").arg(DATETIME);
             }
             else
             {
-                qDebug() << tr("%1 ID=%2 database upload failed").arg(DATETIME).arg(uploadPara.at(1));
-                stream << QString("%1\tID=%2 database upload failed\n").arg(DATETIME).arg(uploadPara.at(1));
+                qDebug() << tr("%1 upload failed").arg(DATETIME);
+                stream << QString("%1\tupload failed\n").arg(DATETIME);
             }
             logFile->close();
         }
